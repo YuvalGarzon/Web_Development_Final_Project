@@ -1,0 +1,37 @@
+# OS
+.DS_Store
+
+# Env (secrets)
+.env
+.env.*
+!.env.example
+!.env.local.example
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Build / cache
+dist/
+build/
+coverage/
+
+# Next.js
+.next/
+out/
+.vercel/
+
+# Editor settings
+.vscode/
+.idea/
+
+# Local test artifacts
+cookies.txt
+
+# Local DB mounts (only if you used bind mounts)
+data/
+mongo-data/
+mongodb-data/
+dump/
