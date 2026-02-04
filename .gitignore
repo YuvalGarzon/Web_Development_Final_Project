@@ -30,8 +30,10 @@ out/
 # Local test artifacts
 cookies.txt
 
-# Local DB mounts (only if you used bind mounts)
+# Local DB mounts
 data/
 mongo-data/
 mongodb-data/
 dump/
+
+*.txt

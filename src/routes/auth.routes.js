@@ -30,11 +30,9 @@ router.post("/register", async (req, res) => {
   try {
     const { email, password } = req.body || {};
 
-    const emailNorm = String(email || "")
-      .trim()
-      .toLowerCase();
+    const emailNorm = String(email || "").trim().toLowerCase();
 
-    if (!emailNorm || !password) {
+    if (!emailNorm || typeof password !== "string" || password.length === 0) {
       return res.status(400).json({ error: "email and password are required" });
     }
 
@@ -74,11 +72,9 @@ router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body || {};
 
-    const emailNorm = String(email || "")
-      .trim()
-      .toLowerCase();
+    const emailNorm = String(email || "").trim().toLowerCase();
 
-    if (!emailNorm || !password) {
+    if (!emailNorm || typeof password !== "string" || password.length === 0) {
       return res.status(400).json({ error: "email and password are required" });
     }
 
