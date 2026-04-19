@@ -28,7 +28,7 @@ function isValidPassword(password) {
 
 router.post("/register", async (req, res) => {
   try {
-    const { email, password } = req.body || {};
+    const { email, password, firstName, lastName } = req.body || {};
 
     const emailNorm = String(email || "").trim().toLowerCase();
 
@@ -53,7 +53,12 @@ router.post("/register", async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = await User.create({ email: emailNorm, passwordHash });
+    const user = await User.create({
+      email: emailNorm,
+      firstName: String(firstName).trim(),
+      lastName: String(lastName).trim(),
+      passwordHash,
+    });
     const accessToken = signAccessToken(user);
     const refreshToken = signRefreshToken(user);
 
@@ -61,7 +66,7 @@ router.post("/register", async (req, res) => {
 
     return res.status(201).json({
       ok: true,
-      user: { id: user._id, email: user.email },
+      user: { id: user._id, email: user.email, firstName: user.firstName, lastName: user.lastName },
     });
   } catch (err) {
     return res.status(500).json({ error: "server error" });
@@ -98,7 +103,7 @@ router.post("/login", async (req, res) => {
 
     return res.status(200).json({
       ok: true,
-      user: { id: user._id, email: user.email },
+      user: { id: user._id, email: user.email, firstName: user.firstName, lastName: user.lastName },
     });
   } catch (err) {
     return res.status(500).json({ error: "server error" });
@@ -144,6 +149,8 @@ router.get("/me", requireAuth, async (req, res) => {
     user: {
       id: req.user.uid,
       email: req.user.email,
+      firstName: req.user.firstName,
+      lastName: req.user.lastName,
       submitters: req.user.submitters,
     },
   });

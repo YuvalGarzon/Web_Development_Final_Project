@@ -20,20 +20,21 @@ function parseDurationToMs(str, fallbackMs) {
 }
 
 function signAccessToken(user) {
-  const submitters = (process.env.SUBMITTERS || "")
-    .split(",")
-    .map(s => s.trim())
-    .filter(Boolean);
+  const submitters = process.env.SUBMITTERS 
+    ? process.env.SUBMITTERS.split(",").map(s => s.trim()).filter(Boolean)
+    : ["Yarin Shushan & Yuval Garzon"];
 
   const payload = {
     uid: String(user._id),
     email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
     submitters,
     typ: "access",
   };
 
   return jwt.sign(payload, process.env.JWT_ACCESS_SECRET, {
-    expiresIn: process.env.ACCESS_EXPIRES_IN || "15m",
+    expiresIn: process.env.ACCESS_EXPIRES_IN || "1d",
   });
 }
 

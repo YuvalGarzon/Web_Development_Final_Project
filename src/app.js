@@ -1,4 +1,5 @@
 const authRoutes = require("./routes/auth.routes");
+const tripRoutes = require("./routes/trip.routes");
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
@@ -19,4 +20,6 @@ app.get("/", (req, res) => {
 });
 
 app.use("/auth", authRoutes);
+app.use("/api/trips", tripRoutes);
+
 module.exports = app;
