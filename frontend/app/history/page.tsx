@@ -128,7 +128,7 @@ export default function HistoryPage() {
                     </h2>
                     <div className="flex flex-wrap items-center gap-3 mt-2">
                       <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
-                        {trip.type === 'hiking' ? '🥾 Hiking' : '🚴 Cycling'}
+                        {(trip.type === 'hiking' || trip.type === 'trek') ? '🥾 Hiking' : '🚴 Cycling'}
                       </span>
                       <span className="text-gray-600">
                         {trip.distance}km • {trip.duration} day{trip.duration > 1 ? 's' : ''}
@@ -255,13 +255,13 @@ export default function HistoryPage() {
           </div>
           <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
             <div className="text-3xl font-bold text-gray-900 mb-2">
-              {trips.filter(t => t.type === 'hiking').length}
+              {trips.filter(t => t.type === 'hiking' || t.type === 'trek').length}
             </div>
             <div className="text-gray-600">Hiking Trips</div>
           </div>
           <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
             <div className="text-3xl font-bold text-gray-900 mb-2">
-              {trips.filter(t => t.type === 'cycling').length}
+              {trips.filter(t => t.type === 'cycling' || t.type === 'bicycle').length}
             </div>
             <div className="text-gray-600">Cycling Trips</div>
           </div>

@@ -419,6 +419,41 @@ export default function PlanningPage() {
                     })}
                   </div>
                 </div>
+
+                {/* Day-by-Day Schedule — derived from actual waypoints */}
+                {(() => {
+                  const coords = generatedTrip.route.coordinates;
+                  const numDays = 3;
+                  const chunkSize = Math.ceil(coords.length / numDays);
+                  const days = Array.from({ length: numDays }, (_, di) => {
+                    const start = di * chunkSize;
+                    const places = coords.slice(start, start + chunkSize).map((_, j) => {
+                      const idx = start + j;
+                      return pointNames[idx] || (idx === 0 ? `Start: ${generatedTrip.route.startPoint}` : idx === coords.length - 1 ? `End: ${generatedTrip.route.endPoint}` : `Waypoint ${idx}`);
+                    });
+                    return { day: di + 1, places };
+                  }).filter(d => d.places.length > 0);
+                  return (
+                    <div className="mt-6">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-3">Day-by-Day Schedule</h3>
+                      <div className="space-y-3">
+                        {days.map((day) => (
+                          <div key={day.day} className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                            <div className="text-sm font-semibold text-blue-800 mb-2">Day {day.day}</div>
+                            <div className="space-y-1">
+                              {day.places.map((place, pi) => (
+                                <div key={pi} className="flex items-center gap-2 text-sm text-blue-900">
+                                  <span className="w-5 h-5 flex items-center justify-center rounded-full bg-blue-200 text-blue-700 font-bold text-xs flex-shrink-0">{pi + 1}</span>
+                                  {place}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* AI-Generated Details */}

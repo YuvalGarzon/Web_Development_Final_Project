@@ -10,9 +10,9 @@ const SYSTEM_PROMPT = process.env.SYSTEM_PROMPT
 function buildPrompt(location, type, duration, preferences) {
   let typeConstraint = "";
   if (type === "bicycle") {
-    typeConstraint = "Generate a 2 or 3-day consecutive route (city-to-city). Distance must be between 30km and 70km per day.";
+    typeConstraint = "Generate a 3-day circular cycling route within the city (starting and ending at the same point). Total distance: 30km to 60km across all 3 days. The route should explore different neighborhoods or areas of the city each day.";
   } else if (type === "trek") {
-    typeConstraint = "Generate 1 to 3 circular routes (starting and ending at the same point). Total distance: 5km to 10km.";
+    typeConstraint = "Generate a 3-day circular hiking route within the city (starting and ending at the same point). Total distance: 5km to 15km across all 3 days. The route should visit different parks, landmarks, or areas each day.";
   } else {
     typeConstraint = "Generate a route appropriate for " + type;
   }
@@ -20,7 +20,7 @@ function buildPrompt(location, type, duration, preferences) {
   return `Create a trip in ${location}.
 ${typeConstraint}
 Realism Constraint: Coordinates MUST follow real roads/trails. Do not return straight lines between points.
-Duration requested: ${duration} days.
+Duration requested: ${duration} days. The coordinates array MUST contain exactly ${duration * 3} points (3 points per day, so each day has an equal share).
 ${preferences ? `Preferences: ${preferences}` : ''}
 
 Format your response exactly as JSON with this structure:

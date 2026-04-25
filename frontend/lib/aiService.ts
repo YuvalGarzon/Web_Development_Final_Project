@@ -42,7 +42,7 @@ class AIService {
       };
       
       const mappedType = typeMap[request.tripType] || 'trek';
-      const duration = request.tripType === 'cycling' || request.tripType === 'bicycle' ? 3 : 1; // 3 days for bicycle, 1 for trek as defaults
+      const duration = 3;
 
       const response = await fetch('http://localhost:4000/api/trips/generate', {
         method: 'POST',
