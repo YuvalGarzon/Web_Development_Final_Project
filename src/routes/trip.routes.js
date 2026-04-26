@@ -20,7 +20,7 @@ function buildPrompt(location, type, duration, preferences) {
   return `Create a trip in ${location}.
 ${typeConstraint}
 Realism Constraint: Coordinates MUST follow real roads/trails. Do not return straight lines between points.
-Duration requested: ${duration} days. The coordinates array MUST contain exactly ${duration * 3} points (3 points per day, so each day has an equal share).
+Duration requested: ${duration} days. The coordinates array MUST contain exactly ${duration * 3} points (3 points per day, so each day has an equal share). Every coordinate must be a DISTINCT location — no two points may share the same or nearly the same lat/lng.
 ${preferences ? `Preferences: ${preferences}` : ''}
 
 Format your response exactly as JSON with this structure:
@@ -46,11 +46,11 @@ router.post("/generate", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "location, type, and duration are required" });
     }
 
-    let tripData = null;
+    const requiredPoints = duration * 3;
     const prompt = buildPrompt(location, type, duration, preferences);
 
-    // Call LLM
-    try {
+    const callLLM = async () => {
+      let raw = null;
       if (provider === "openai") {
         const response = await axios.post("https://api.openai.com/v1/chat/completions", {
           model: "gpt-4o",
@@ -64,8 +64,7 @@ router.post("/generate", requireAuth, async (req, res) => {
         });
         const content = response.data.choices[0].message.content;
         const jsonMatch = content.match(/\{[\s\S]*\}/);
-        tripData = JSON.parse(jsonMatch ? jsonMatch[0] : content);
-        // claude check removed
+        raw = JSON.parse(jsonMatch ? jsonMatch[0] : content);
       } else if (provider === "gemini") {
         const response = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${process.env.GEMINI_API_KEY}`, {
           systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
@@ -74,13 +73,43 @@ router.post("/generate", requireAuth, async (req, res) => {
         });
         const content = response.data.candidates[0].content.parts[0].text;
         const jsonMatch = content.match(/\{[\s\S]*\}/);
-        tripData = JSON.parse(jsonMatch ? jsonMatch[0] : content);
+        raw = JSON.parse(jsonMatch ? jsonMatch[0] : content);
       } else {
-        return res.status(400).json({ error: "Unsupported provider" });
+        throw new Error("Unsupported provider");
       }
-    } catch (llmErr) {
-      console.error("LLM Error:", llmErr.response?.data || llmErr.message);
-      return res.status(500).json({ error: "Failed to generate route from AI" });
+      return raw;
+    };
+
+    const deduplicate = (data) => {
+      if (!Array.isArray(data.coordinates)) return data;
+      const seen = [];
+      data.coordinates = data.coordinates.filter(([lat, lng]) => {
+        const isDup = seen.some(([slat, slng]) => Math.abs(lat - slat) < 0.0005 && Math.abs(lng - slng) < 0.0005);
+        if (!isDup) seen.push([lat, lng]);
+        return !isDup;
+      });
+      return data;
+    };
+
+    // Call LLM with up to 3 attempts to get exactly requiredPoints unique coordinates
+    let tripData = null;
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const result = deduplicate(await callLLM());
+        if (result.coordinates.length >= requiredPoints || attempt === maxAttempts) {
+          // Trim to exactly requiredPoints if the AI returned more
+          result.coordinates = result.coordinates.slice(0, requiredPoints);
+          tripData = result;
+          break;
+        }
+        console.log(`Attempt ${attempt}: got ${result.coordinates.length} unique points, need ${requiredPoints}. Retrying...`);
+      } catch (llmErr) {
+        if (attempt === maxAttempts) {
+          console.error("LLM Error:", llmErr.response?.data || llmErr.message);
+          return res.status(500).json({ error: "Failed to generate route from AI" });
+        }
+      }
     }
 
     // Coordinates for weather (middle of route or start)
