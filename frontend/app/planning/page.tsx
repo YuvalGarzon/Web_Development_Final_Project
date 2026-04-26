@@ -31,6 +31,7 @@ export default function PlanningPage() {
   const [pointNames, setPointNames] = useState<string[]>([]);
   const mapRef = useRef<MapComponentRef>(null);
   const [error, setError] = useState('');
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Check authentication on mount
   useEffect(() => {
@@ -80,8 +81,7 @@ export default function PlanningPage() {
       });
 
       if ('message' in result) {
-        // This is an error
-        setError(`${aiService.getProviderDisplayName(aiProvider)} error: ${result.message}`);
+        setError(result.message);
         setGenerating(false);
         return;
       }
@@ -110,7 +110,7 @@ export default function PlanningPage() {
       setGeneratedTrip(trip);
       reverseGeocodeAll(result.trip.coordinates, result.trip.startPoint, result.trip.endPoint);
     } catch (error) {
-      setError(`Failed to generate trip: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setError(error instanceof Error ? error.message : 'The AI model is temporarily unavailable. Please try again in a few seconds.');
     } finally {
       setGenerating(false);
     }
@@ -143,16 +143,19 @@ export default function PlanningPage() {
       });
       
       if (!response.ok) {
-        throw new Error('Failed to save trip');
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to save trip. Please try again.');
       }
-      
-      alert(`Trip saved successfully! Generated with ${aiService.getProviderDisplayName(aiProvider)}. You can view it in your History page.`);
+
       setGeneratedTrip(null);
       setAIGeneratedData(null);
       setLocation('');
       setPreferences('');
+      setError('');
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 4000);
     } catch (saveError) {
-      alert('Error saving trip.');
+      setError(saveError instanceof Error ? saveError.message : 'Failed to save trip. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -187,6 +190,12 @@ export default function PlanningPage() {
             <h2 className="text-xl font-semibold text-gray-900 mb-6">
               Configure Your Trip
             </h2>
+
+            {saveSuccess && (
+              <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-green-700 text-sm font-medium">Trip saved! You can view it in your History page.</p>
+              </div>
+            )}
 
             {error && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">

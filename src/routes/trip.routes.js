@@ -17,13 +17,16 @@ function buildPrompt(location, type, duration, preferences) {
     typeConstraint = "Generate a route appropriate for " + type;
   }
 
-  return `Create a trip in ${location}.
+  return `Create a ${duration}-day trip in ${location}.
 ${typeConstraint}
-Realism Constraint: Coordinates MUST follow real roads/trails. Do not return straight lines between points.
-Duration requested: ${duration} days. The coordinates array MUST contain exactly ${duration * 3} points (3 points per day, so each day has an equal share). Every coordinate must be a DISTINCT location — no two points may share the same or nearly the same lat/lng.
 ${preferences ? `Preferences: ${preferences}` : ''}
 
-Format your response exactly as JSON with this structure:
+Rules:
+- Coordinates must follow real roads/trails (no straight lines).
+- Provide around 9 distinct waypoints spread across the route. All coordinates must be different locations.
+- Respond with ONLY valid JSON. No markdown, no explanation, no code fences.
+
+JSON structure:
 {
   "title": "...",
   "description": "...",
@@ -31,7 +34,7 @@ Format your response exactly as JSON with this structure:
   "startPoint": "...",
   "endPoint": "...",
   "distance": number,
-  "duration": number,
+  "duration": ${duration},
   "difficulty": "easy|moderate|challenging",
   "highlights": ["..."],
   "recommendations": ["..."]
@@ -46,70 +49,105 @@ router.post("/generate", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "location, type, and duration are required" });
     }
 
-    const requiredPoints = duration * 3;
     const prompt = buildPrompt(location, type, duration, preferences);
 
-    const callLLM = async () => {
-      let raw = null;
-      if (provider === "openai") {
-        const response = await axios.post("https://api.openai.com/v1/chat/completions", {
-          model: "gpt-4o",
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: prompt }
-          ],
-          temperature: 0.7
-        }, {
-          headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }
-        });
-        const content = response.data.choices[0].message.content;
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        raw = JSON.parse(jsonMatch ? jsonMatch[0] : content);
-      } else if (provider === "gemini") {
-        const response = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.7 }
-        });
-        const content = response.data.candidates[0].content.parts[0].text;
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        raw = JSON.parse(jsonMatch ? jsonMatch[0] : content);
-      } else {
-        throw new Error("Unsupported provider");
-      }
-      return raw;
+    const extractJSON = (text) => {
+      // Strip markdown code fences (```json ... ``` or ``` ... ```)
+      const stripped = text.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '');
+      // Find the outermost JSON object
+      const start = stripped.indexOf('{');
+      const end = stripped.lastIndexOf('}');
+      if (start === -1 || end === -1) throw new Error('No JSON object found in response');
+      return JSON.parse(stripped.slice(start, end + 1));
     };
 
-    const deduplicate = (data) => {
-      if (!Array.isArray(data.coordinates)) return data;
+    const getLLMErrorMessage = (err) => {
+      const status = err.response?.status;
+      if (status === 401 || status === 429 || status === 502 || status === 503)
+        return "The AI model is temporarily unavailable. Please try again in a few seconds.";
+      return "The AI model could not generate a route for this location. Try a different city or switch the AI provider.";
+    };
+
+    const callLLM = async () => {
+      if (provider === "openai") {
+        let response;
+        try {
+          response = await axios.post("https://api.openai.com/v1/chat/completions", {
+            model: "gpt-4o",
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              { role: "user", content: prompt }
+            ],
+            temperature: 0.7
+          }, {
+            headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }
+          });
+        } catch (err) {
+          throw new Error(getLLMErrorMessage(err));
+        }
+        try {
+          const content = response.data.choices[0].message.content;
+          return extractJSON(content);
+        } catch (parseErr) {
+          console.error("OpenAI JSON parse failed. Raw response:", response.data.choices[0].message.content);
+          throw new Error("The AI model returned an unexpected response. Please try again.");
+        }
+      } else if (provider === "gemini") {
+        let response;
+        try {
+          response = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+            systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.7 }
+          });
+        } catch (err) {
+          throw new Error(getLLMErrorMessage(err));
+        }
+        try {
+          const content = response.data.candidates[0].content.parts[0].text;
+          return extractJSON(content);
+        } catch (parseErr) {
+          console.error("Gemini JSON parse failed. Raw response:", response.data.candidates[0].content.parts[0].text);
+          throw new Error("The AI model returned an unexpected response. Please try again.");
+        }
+      } else {
+        throw new Error("The AI model is temporarily unavailable. Please try again in a few seconds.");
+      }
+    };
+
+    const deduplicate = (coords) => {
       const seen = [];
-      data.coordinates = data.coordinates.filter(([lat, lng]) => {
+      return coords.filter(([lat, lng]) => {
         const isDup = seen.some(([slat, slng]) => Math.abs(lat - slat) < 0.0005 && Math.abs(lng - slng) < 0.0005);
         if (!isDup) seen.push([lat, lng]);
         return !isDup;
       });
-      return data;
     };
 
-    // Call LLM with up to 3 attempts to get exactly requiredPoints unique coordinates
-    let tripData = null;
-    const maxAttempts = 3;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        const result = deduplicate(await callLLM());
-        if (result.coordinates.length >= requiredPoints || attempt === maxAttempts) {
-          // Trim to exactly requiredPoints if the AI returned more
-          result.coordinates = result.coordinates.slice(0, requiredPoints);
-          tripData = result;
-          break;
+    const padToMin = (coords, min) => {
+      const result = [...coords];
+      while (result.length < min) {
+        let maxDist = -1, maxIdx = 0;
+        for (let i = 0; i < result.length - 1; i++) {
+          const d = Math.abs(result[i][0] - result[i+1][0]) + Math.abs(result[i][1] - result[i+1][1]);
+          if (d > maxDist) { maxDist = d; maxIdx = i; }
         }
-        console.log(`Attempt ${attempt}: got ${result.coordinates.length} unique points, need ${requiredPoints}. Retrying...`);
-      } catch (llmErr) {
-        if (attempt === maxAttempts) {
-          console.error("LLM Error:", llmErr.response?.data || llmErr.message);
-          return res.status(500).json({ error: "Failed to generate route from AI" });
-        }
+        const mid = [(result[maxIdx][0] + result[maxIdx+1][0]) / 2, (result[maxIdx][1] + result[maxIdx+1][1]) / 2];
+        result.splice(maxIdx + 1, 0, mid);
       }
+      return result;
+    };
+
+    // Single LLM call — deduplicate and ensure at least 9 points
+    let tripData = null;
+    try {
+      tripData = await callLLM();
+      if (Array.isArray(tripData.coordinates)) {
+        tripData.coordinates = padToMin(deduplicate(tripData.coordinates), 9);
+      }
+    } catch (llmErr) {
+      console.error("LLM Error:", llmErr.message);
+      return res.status(500).json({ error: llmErr.message });
     }
 
     // Coordinates for weather (middle of route or start)
@@ -152,7 +190,7 @@ router.post("/generate", requireAuth, async (req, res) => {
 
   } catch (err) {
     console.error("Generate error", err);
-    res.status(500).json({ error: "Server error during generation" });
+    res.status(500).json({ error: "The AI model is temporarily unavailable. Please try again in a few seconds." });
   }
 });
 

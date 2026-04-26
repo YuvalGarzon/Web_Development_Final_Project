@@ -13,6 +13,7 @@ export default function HistoryPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [error, setError] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; title: string } | null>(null);
 
   // Check authentication and load trips on mount
   useEffect(() => {
@@ -39,12 +40,18 @@ export default function HistoryPage() {
     }
   };
 
-  const handleDelete = async (tripId: string, title: string) => {
-    if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
-    setDeleting(tripId);
-    const ok = await authService.deleteTrip(tripId);
+  const handleDelete = (tripId: string, title: string) => {
+    setConfirmDelete({ id: tripId, title });
+  };
+
+  const confirmDeleteTrip = async () => {
+    if (!confirmDelete) return;
+    const { id } = confirmDelete;
+    setConfirmDelete(null);
+    setDeleting(id);
+    const ok = await authService.deleteTrip(id);
     if (ok) {
-      setTrips(prev => prev.filter((t: any) => (t._id || t.id) !== tripId));
+      setTrips(prev => prev.filter((t: any) => (t._id || t.id) !== id));
     } else {
       setError('Failed to delete trip.');
     }
@@ -81,6 +88,32 @@ export default function HistoryPage() {
 
   return (
     <div className="max-w-6xl mx-auto">
+      {/* Delete confirmation modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Trip</h3>
+            <p className="text-gray-600 mb-6">
+              Delete <span className="font-medium">"{confirmDelete.title}"</span>? This cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteTrip}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mb-8">
         <h1 className="text-4xl font-bold text-gray-900 mb-2">
           Trip History

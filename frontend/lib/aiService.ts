@@ -62,14 +62,14 @@ class AIService {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(`Backend API error: ${error.error || response.statusText}`);
+        throw new Error(error.error || 'Failed to generate trip. Please try again.');
       }
 
       const data = await response.json();
       return data; // Returns { trip, image, weather } from backend
     } catch (error) {
       return {
-        message: error instanceof Error ? error.message : 'Unknown AI error',
+        message: error instanceof Error ? error.message : 'The AI model is temporarily unavailable. Please try again in a few seconds.',
         provider: request.provider,
         code: 'AI_ERROR',
       };
